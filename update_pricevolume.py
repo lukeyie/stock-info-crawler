@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import time
 
 from stock_crawler import StockCrawler
 from db_manage import DBManage
@@ -14,29 +15,41 @@ def arg_parse():
         "-sd", "--start",
         dest="start_date",
         type=str,
-        required=True,
         help="The start date you want to search from"
     )
     parser.add_argument(
         "-ed", "--end",
         dest="end_date",
         type=str,
-        required=True,
         help="The end date you want to search to"
+    )
+    parser.add_argument(
+        "-l", "--latest",
+        dest="to_latest",
+        action='store_true',
+        default=False,
+        help="Update to latest info"
     )
 
     return parser.parse_args()
 
 
-def get_start_end_date(pv_collection, start_date, end_date):
+def get_start_end_date(pv_collection, arg_options):
+    start_date = arg_options.start_date
+    end_date = arg_options.end_date
+
     ticker_date_info = pv_collection \
         .find_one({'ticker': ticker})['date_info']
+    if len(ticker_date_info) <= 0:
+        return[arg_options.start_date, arg_options.end_date]
     ticker_date_info.sort(key=lambda x: x['date'])
 
-    if len(ticker_date_info) <= 0:
-        return[start_date, end_date]
     db_first_date = ticker_date_info[0]['date']
     db_last_date = ticker_date_info[len(ticker_date_info) - 1]['date']
+
+    if arg_options.to_latest:
+        return [db_last_date,
+                str(datetime.date.today() + datetime.timedelta(1))]
 
     if end_date > db_last_date:
         start_date = db_last_date \
@@ -68,7 +81,7 @@ for ticker in stock_crawler.stocks_list:
             ticker_obj = pv_collection.find_one({'ticker': ticker})
             if ticker_obj and len(ticker_obj['date_info']) > 0:
                 [start_date, end_date] = get_start_end_date(
-                    pv_collection, arg_options.start_date, arg_options.end_date)
+                    pv_collection, arg_options)
                 if not start_date and not end_date:
                     continue
 
@@ -80,6 +93,8 @@ for ticker in stock_crawler.stocks_list:
                     arg_options.start_date, arg_options.end_date, ticker)
                 db_manage.insert_pricevolume(data)
         except Exception:
+            print(f'Ticker {ticker} wait for 5(s) and retry')
+            time.sleep(5)
             continue
         else:
             break
