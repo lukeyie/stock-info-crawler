@@ -21,8 +21,10 @@ class StockCrawler:
         start_date_timestamp = self.__create_timestamp(start_date)
         end_date_timestamp = self.__create_timestamp(end_date)
 
+        is_twse = self.stocks_list[ticker]["market"] == 'TWSE'
         target_url = self.__build_crawl_target_url(
-            ticker, start_date_timestamp, end_date_timestamp)
+            ticker, start_date_timestamp, end_date_timestamp, is_twse=is_twse)
+
         try:
             response = requests.get(target_url)
             stock_info_df = pd.read_csv(StringIO(response.text))
@@ -58,14 +60,20 @@ class StockCrawler:
             print(f'## Warning: Ticker {ticker} is failed!')
 
     def __build_crawl_target_url(self, ticker, start_date_timestamp,
-                                 end_date_timestamp):
-        crawl_target_url = 'https://query1.finance.yahoo.com/' \
-                           f'v7/finance/download/{ticker}.TW' \
-                           f'?period1={str(start_date_timestamp)}' \
-                           f'&period2={str(end_date_timestamp)}' \
-                           '&interval=1d&events=history&crumb=hP2rOschxO0'
+                                 end_date_timestamp, is_twse=True):
+        twse_target_url = 'https://query1.finance.yahoo.com/' \
+            f'v7/finance/download/{ticker}.TW' \
+            f'?period1={str(start_date_timestamp)}' \
+            f'&period2={str(end_date_timestamp)}' \
+            '&interval=1d&events=history&crumb=hP2rOschxO0'
 
-        return crawl_target_url
+        otc_target_url = 'https://query1.finance.yahoo.com/' \
+            f'v7/finance/download/{ticker}.TWO' \
+            f'?period1={str(start_date_timestamp)}' \
+            f'&period2={str(end_date_timestamp)}' \
+            '&interval=1d&events=history&crumb=hP2rOschxO0'
+
+        return twse_target_url if is_twse else otc_target_url
 
     def __create_timestamp(self, date):
         date_time = datetime.datetime.strptime(date, self.__DATE_FORMAT)
@@ -79,9 +87,10 @@ class StockCrawler:
             self.__get_stocks_list(self.__OTC_LISTED_STOCKS_URL)
 
         twse_stocks_list.update(otc_stocks_list)
-        return twse_stocks_list
+        return otc_stocks_list
 
     def __get_stocks_list(self, url):
+        market = 'TWSE' if url == self.__TWSE_LISTED_STOCKS_URL else 'OTC'
         unformatted_stocks_table = requests.get(url)
         unformatted_stocks_df = pd.read_html(unformatted_stocks_table.text)[0]
         unformatted_stocks_df.columns = unformatted_stocks_df.iloc[0]
@@ -97,7 +106,8 @@ class StockCrawler:
                 {
                     f'{ticker_and_name[0]}': {
                         'stock_name': f'{ticker_and_name[1]}',
-                        'sector':  f'{unformatted_stocks_df["產業別"].iloc[i]}'
+                        'sector':  f'{unformatted_stocks_df["產業別"].iloc[i]}',
+                        'market': f'{market}'
                     }
                 }
             )

@@ -33,6 +33,8 @@ def get_start_end_date(pv_collection, start_date, end_date):
         .find_one({'ticker': ticker})['date_info']
     ticker_date_info.sort(key=lambda x: x['date'])
 
+    if len(ticker_date_info) <= 0:
+        return[start_date, end_date]
     db_first_date = ticker_date_info[0]['date']
     db_last_date = ticker_date_info[len(ticker_date_info) - 1]['date']
 
@@ -58,13 +60,13 @@ arg_options = arg_parse()
 stock_crawler = StockCrawler()
 db_manage = DBManage()
 
-i = 0
 for ticker in stock_crawler.stocks_list:
     pv_collection = db_manage.get_collection(PRICE_VOLUME_COLLECTION)
 
     for attempt in range(0, 3):
         try:
-            if(pv_collection.find_one({'ticker': ticker})):
+            ticker_obj = pv_collection.find_one({'ticker': ticker})
+            if ticker_obj and len(ticker_obj['date_info']) > 0:
                 [start_date, end_date] = get_start_end_date(
                     pv_collection, arg_options.start_date, arg_options.end_date)
                 if not start_date and not end_date:
