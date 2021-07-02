@@ -1,10 +1,10 @@
-# stock-info-crawler
- A stock crawler can update to mongoDB
+# Stock Info Crawler
+ A stock crawler can update stock data to Atlas Mongo DB
 
 ## Environment setting
-This script required **Python 3** or higher version.
+This script required `Python 3` or higher version.
 
-This script use **Pipenv** as packaging tool. Please install **Pipenv** first though Python first.
+This script use `Pipenv` as packaging tool. Please install `Pipenv` first though Python first.
 ```
 pip install pipenv
 
@@ -20,11 +20,11 @@ pipenv install
 ```
 
 ## Before usage
-Follow **dbCredential.config.example** and set up your Atlas Mongo DB information.
+Follow `dbCredential.config.example` and set up your Atlas Mongo DB information.
 
-Then rename **dbCredential.config.example** to **dbCredential.config**
+Then rename `dbCredential.config.example` to `dbCredential.config`
 
-*Note: You may need to download X509 licence for usage*
+*Note: You may need to download `X509` licence for usage*
 
 ## Usage
 Required argument:
@@ -34,7 +34,7 @@ Required argument:
 
 -l --latest : Update database to latest date
 ```
-*Note: [-sd, -ed] or [-l] is required*
+*Note: `[-sd, -ed]` or `[-l]` is required*
 
 Example:
 ```
