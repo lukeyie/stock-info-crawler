@@ -42,5 +42,5 @@ pipenv run update_pricevolume.py -sd 2011-01-01 -ed 2021-06-30
 
 or
 
-ppipenv run update_pricevolume.py -l
+pipenv run update_pricevolume.py -l
 ```
