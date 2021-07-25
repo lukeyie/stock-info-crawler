@@ -1,3 +1,4 @@
 .vscode
 dbCredential.config
 X509*
+api.config

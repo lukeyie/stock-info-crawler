@@ -2,28 +2,32 @@ from io import StringIO
 from datetime import datetime
 import math
 from decimal import Decimal, ROUND_HALF_UP
-import time
+from urllib.parse import urlencode
+import json
 
 import requests
 import pandas as pd
 
-from dto import StockInfoDTO, StockDTO, IncomeStatementDTO, DateInfoDTO
+from dto import StockInfoDTO, StockDTO, IncomeStatementDTO, \
+    DateInfoDTO, FinMindFinancialStatementsDTO
 
 
 class StockCrawler:
     __DATE_FORMAT = '%Y-%m-%d'
 
+    __API_CONFIG_PATH = '.\\api.config'
+
     __TWSE_LISTED_STOCKS_URL = 'http://isin.twse.com.tw/isin/C_public.jsp' \
         '?strMode=2'
     __OTC_LISTED_STOCKS_URL = 'https://isin.twse.com.tw/isin/C_public.jsp' \
         '?strMode=4'
-
-    __INCOME_STATEMENT_BEFORE_IFRSS_URL = 'https://mops.twse.com.tw/mops/web/' \
-        'ajax_t05st32'
-    __INCOME_STATEMENT_AFTER_IFRSS_URL = 'https://mops.twse.com.tw/mops/web/' \
-        'ajax_t164sb04'
+    __YAHOO_FINANCE_API_URL = 'https://query1.finance.yahoo.com/v7/finance/' \
+        'download/'
+    __FINMIND_API_URL = 'https://api.finmindtrade.com/api/v4/data'
 
     def __init__(self):
+        input_file = open(self.__API_CONFIG_PATH)
+        self.__api_config = json.load(input_file)
         self.stocks_list = self.__get_tw_available_stocks_list()
 
     def get_price_and_vol(self, ticker, start_date, end_date):
@@ -44,11 +48,8 @@ class StockCrawler:
                     '91.0.4472.164 Safari/537.36'
                 }
             )
-            print(response)
-            print(response.history)
-
-            stock_info_df = pd.read_csv(StringIO(response.text),
-                                        error_bad_lines=False)
+            stock_info_df = pd.read_csv(
+                StringIO(response.text), error_bad_lines=False)
             stock_dto = StockDTO(
                 ticker=ticker, stock_name=self.stocks_list[ticker].stock_name)
             for i in range(len(stock_info_df.index)):
@@ -78,90 +79,75 @@ class StockCrawler:
             print(f'Error: {e}')
             print(f'## Warning: Ticker {ticker} is failed!')
 
-    def get_season_income_statement_dto(self, ticker, year, season):
-        roc_year = year - 1911 if year > 1000 else year
-        form_data = {
-            'encodeURIComponent': 1,
-            'step': 1,
-            'firstin': 1,
-            'off': 1,
-            'co_id': ticker,
-            'year': roc_year,
-            'season': season
-        }
+    def get_income_statements_dto(self, ticker, start_year, start_season,
+                                  end_year, end_season):
 
-        print(f'Start getting {ticker} {year}/S{season} income statement')
+        [start_year, start_season, end_year, end_season] = \
+            [int(start_year), int(start_season),
+             int(end_year), int(end_season)]
+
         try:
-            response = requests.post(
-                self.__build_income_statement_url_from_roc_year(year),
-                form_data,
-                headers={'Connection': 'close'})
+            response = requests.get(
+                self.__build_income_statement_url(
+                    ticker, start_year, start_season, end_year, end_season),
+                headers={'Connection': 'close'}
+            ).json()
 
-            income_statement_df = \
-                pd.read_html(response.text, match=('每股盈餘'))[0] \
-                .fillna("")
+            if response['status'] == 402:
+                raise Exception('Reach the FindMind limit')
         except Exception as e:
-            print(f'Error: {e}')
-            print(f'{ticker} getting income statement failed')
-        income_statement_df = \
-            income_statement_df[income_statement_df.iloc[:, 1] != ""] \
-            .iloc[:, 0:2]
-        income_statement_df.columns = ['item', 'amount']
+            raise Exception(f'Ticker: {ticker}, Error: {e}')
 
-        income_statement_dto = IncomeStatementDTO()
-        income_statement_dto.year = year
-        income_statement_dto.season = season
-        for index, row in income_statement_df.iterrows():
-            self.__update_value_from_income_statement_df_row(
-                income_statement_dto, row)
+        data_dict = {}
+        for item in response['data']:
+            find_mind_dto = FinMindFinancialStatementsDTO.parse_obj(item)
 
-        return income_statement_dto
+            date = datetime.strptime(find_mind_dto.date, self.__DATE_FORMAT)
+            if(date not in data_dict):
+                income_statement_dto = IncomeStatementDTO(
+                    year=date.year, season=self.__get_season(date.month))
+                data_dict.update({date: income_statement_dto})
 
-    def get_stock_dto_with_income_statement(
-            self, ticker, start_date, end_date):
-        start_datetime = datetime.strptime(start_date, self.__DATE_FORMAT)
-        end_datetime = datetime.strptime(end_date, self.__DATE_FORMAT)
-        seasons_diff = self.__get_seasons_diff(start_datetime, end_datetime)
+            self.__build_income_statement_dto_from_finmind_api(
+                data_dict[date], find_mind_dto)
 
-        cur_year = start_datetime.year
-        start_season = self.__get_season(start_datetime.month)
         stock_dto = StockDTO(
             ticker=ticker, stock_name=self.stocks_list[ticker].stock_name)
-        for i in range(0, seasons_diff + 1):
-            cur_season = 4 \
-                if (start_season + i) == 4 else (start_season + i) % 4
-
-            income_statement_dto = self.get_season_income_statement_dto(
-                ticker, cur_year, cur_season)
-            stock_dto.income_statements.append(income_statement_dto)
-            time.sleep(50/1000)
-
-            cur_year = cur_year + 1 \
-                if cur_season == 4 else cur_year
+        for key in data_dict:
+            stock_dto.income_statements.append(data_dict[key])
 
         return stock_dto
 
     def __build_crawl_target_url(self, ticker, start_date_timestamp,
                                  end_date_timestamp, is_twse=True):
-        twse_target_url = 'https://query1.finance.yahoo.com/' \
-            f'v7/finance/download/{ticker}.TW' \
-            f'?period1={str(start_date_timestamp)}' \
-            f'&period2={str(end_date_timestamp)}' \
-            '&interval=1d&events=history&crumb=hP2rOschxO0'
+        query_str = urlencode({
+            'period1': str(start_date_timestamp),
+            'period2': str(end_date_timestamp),
+            'interval': '1d',
+            'events': 'history',
+            'crumb': 'hP2rOschxO0'
+        })
 
-        otc_target_url = 'https://query1.finance.yahoo.com/' \
-            f'v7/finance/download/{ticker}.TWO' \
-            f'?period1={str(start_date_timestamp)}' \
-            f'&period2={str(end_date_timestamp)}' \
-            '&interval=1d&events=history&crumb=hP2rOschxO0'
+        twse_target_url = \
+            self.__YAHOO_FINANCE_API_URL + f'{ticker}.TW?' + query_str
+        otc_target_url = \
+            self.__YAHOO_FINANCE_API_URL + '{ticker}.TWO?' + query_str
 
         return twse_target_url if is_twse else otc_target_url
 
-    def __build_income_statement_url_from_roc_year(self, year):
-        if year >= 2013:
-            return self.__INCOME_STATEMENT_AFTER_IFRSS_URL
-        else:
-            return self.__INCOME_STATEMENT_BEFORE_IFRSS_URL
+    def __build_income_statement_url(self, ticker, start_year, start_season,
+                                     end_year, end_season):
+        query_str = urlencode({
+            'dataset': 'TaiwanStockFinancialStatements',
+            'data_id': ticker,
+            'start_date': self.__get_date_from_season(
+                start_year, start_season),
+            'end_date': self.__get_date_from_season(
+                end_year, end_season),
+            'token': self.__api_config['finmind_api_token']
+        })
+
+        return self.__FINMIND_API_URL + '?' + query_str
 
     def __create_timestamp(self, date):
         date_time = datetime.strptime(date, self.__DATE_FORMAT)
@@ -178,20 +164,20 @@ class StockCrawler:
         else:
             return 4
 
-    def __get_seasons_diff(self, start_datetime, end_datetime):
-        start_year = start_datetime.year
-        start_season = self.__get_season(start_datetime.month)
-        end_year = end_datetime.year
-        end_season = self.__get_season(end_datetime.month)
-
-        return (end_year - start_year - 1) * 4 \
-            + end_season + (4 - start_season)
+    def __get_date_from_season(self, year, season):
+        if season == 1:
+            return f'{year}-01-01'
+        elif season == 2:
+            return f'{year}-04-01'
+        elif season == 3:
+            return f'{year}-07-01'
+        elif season == 4:
+            return f'{year}-10-01'
 
     def __get_tw_available_stocks_list(self):
-        twse_stocks_list = \
-            self.__get_stocks_list(self.__TWSE_LISTED_STOCKS_URL)
-        otc_stocks_list = \
-            self.__get_stocks_list(self.__OTC_LISTED_STOCKS_URL)
+        twse_stocks_list = self.__get_stocks_list(
+            self.__TWSE_LISTED_STOCKS_URL)
+        otc_stocks_list = self.__get_stocks_list(self.__OTC_LISTED_STOCKS_URL)
 
         twse_stocks_list.update(otc_stocks_list)
         return dict(sorted(twse_stocks_list.items(), key=lambda item: item[0]))
@@ -218,34 +204,33 @@ class StockCrawler:
 
         return stocks
 
-    def __update_value_from_income_statement_df_row(
-            self, income_statement_dto, row):
-        if '營業收入合計' == row[0]:
-            income_statement_dto.nor = int(float(row[1]))
-        elif '營業成本合計' == row[0]:
-            income_statement_dto.cost = int(float(row[1]))
-        elif '營業毛利（毛損）' == row[0] or \
-                '營業毛利(毛損)' == row[0]:
-            income_statement_dto.pro = int(float(row[1]))
-        elif '營業費用合計' == row[0]:
-            income_statement_dto.oe = int(float(row[1]))
-        elif '營業利益（損失）' == row[0] or \
-                '營業淨利(淨損)' == row[0]:
-            income_statement_dto.oi = int(float(row[1]))
-        # after 102
-        elif '營業外收入及支出合計' in row[0]:
-            income_statement_dto.nor = int(float(row[1]))
-        # before 102
-        elif '營業外收入及利益' in row[0]:
-            income_statement_dto.nor += int(float(row[1]))
-        # before 102
-        elif '營業外費用及損失' in row[0]:
-            income_statement_dto.nor -= int(float(row[1]))
-        elif '稅前淨利（淨損）' == row[0] or \
-                '繼續營業單位稅前淨利(淨損)' == row[0]:
-            income_statement_dto.btax = int(float(row[1]))
-        elif '本期淨利（淨損）' == row[0] or \
-                '本期淨利(淨損)' == row[0]:
-            income_statement_dto.ni = int(float(row[1]))
-        elif '基本每股盈餘' in row[0]:
-            income_statement_dto.eps = float(row[1])
+    def __build_income_statement_dto_from_finmind_api(
+            self, income_statement_dto,
+            finmind_api_dto: FinMindFinancialStatementsDTO):
+
+        btax = ['IncomeBeforeTaxFromContinuingOperations',
+                'IncomeBeforeIncomeTax', 'PreTaxIncome']
+        ni = ['NetIncome', 'IncomeAfterTaxes']
+
+        if finmind_api_dto.type == 'Revenue':
+            income_statement_dto.revenue = int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type == 'CostOfGoodsSold':
+            income_statement_dto.cost = int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type == 'GrossProfit':
+            income_statement_dto.gp = int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type == 'OperatingExpenses':
+            income_statement_dto.oe = int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type == 'OperatingIncome':
+            income_statement_dto.oi = int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type == 'TotalNonoperatingIncomeAndExpense':
+            income_statement_dto.nie = int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type == 'TotalNonbusinessIncome':
+            income_statement_dto.nie += int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type == 'TotalnonbusinessExpenditure':
+            income_statement_dto.nie -= int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type in btax:
+            income_statement_dto.btax = int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type in ni:
+            income_statement_dto.ni = int(finmind_api_dto.value / 1000)
+        elif finmind_api_dto.type == 'EPS':
+            income_statement_dto.eps = finmind_api_dto.value

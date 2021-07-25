@@ -1,10 +1,8 @@
 import json
-from stock_crawler import StockCrawler
 import time
 from decimal import Decimal, ROUND_HALF_UP
 
 from pymongo import MongoClient
-from pydantic import ValidationError
 
 from dto import StockDTO
 
@@ -19,7 +17,7 @@ class DBManage:
         self.__db_uri = self.__create_db_connection_url()
         self.__db_instance = self.__connect_db(self.__db_uri)
 
-    def insert_pricevolume(self, dto: StockDTO):
+    def insert_stock(self, dto: StockDTO):
         collection = self.__db_instance[self.collection_name]
 
         print(f'Start insert ticker : {dto.ticker}')
@@ -37,8 +35,7 @@ class DBManage:
         timer_start = time.time()
         date_info_list = []
         for date_info in dto.date_info:
-            date_info_dict = date_info.dict()
-            date_info_list.append(date_info_dict)
+            date_info_list.append(date_info.dict())
         collection.update_one(
             {'ticker': dto.ticker},
             {'$addToSet': {'date_info': {'$each': date_info_list}}},
@@ -49,6 +46,28 @@ class DBManage:
         pass_time = Decimal(timer_end - timer_start).quantize(
             Decimal('.1'), rounding=ROUND_HALF_UP)
         print(f'Update {dto.ticker} completed ({pass_time} s)')
+
+    def update_income_statements(self, dto: StockDTO):
+        collection = self.__db_instance[self.collection_name]
+
+        print(f'Start update ticker : {dto.ticker}')
+        timer_start = time.time()
+        income_statements = []
+        for income_statement in dto.income_statements:
+            income_statements.append(income_statement.dict())
+        collection.update_one(
+            {'ticker': dto.ticker},
+            {'$addToSet':
+                {'income_statements': {'$each': income_statements}}
+             },
+            upsert=True
+        )
+
+        timer_end = time.time()
+        pass_time = Decimal(timer_end - timer_start).quantize(
+            Decimal('.1'), rounding=ROUND_HALF_UP)
+        print(f'Update {dto.ticker} income statements completed '
+              f'({pass_time} s)')
 
     def create_index_for_collection(self, collection,
                                     index_fields, index_name,

@@ -7,9 +7,9 @@ This script required `Python 3` or higher version.
 This script use `Pipenv` as packaging tool. Please install `Pipenv` first though Python first.
 ```
 pip install pipenv
+```
 
-or
-
+```
 pip3 install pipenv
 ```
 
@@ -26,21 +26,42 @@ Then rename `dbCredential.config.example` to `dbCredential.config`
 
 *Note: You may need to download `X509` licence for usage*
 
-## Usage
+## Update Price and Volume
 Required argument:
-```
--sd --start_date : Set up update start date. Format: %Y-%m-%d.
--ed --end_date : Set up update end date. Format: %Y-%m-%d.
 
--l --latest : Update database to latest date
-```
-*Note: `[-sd, -ed]` or `[-l]` is required*
+| Switch | Description |
+| - | - |
+| -s, --start | Set up update start date. Format: "yyyy-mm-dd". |
+| -e, --end | Set up update end date. Format: "yyyy-mm-dd". |
+| -l, --latest | Update database to latest date. |
+
+*Note: `[-s, -e]` or `[-l]` is required*
 
 Example:
 ```
-pipenv run update_pricevolume.py -sd 2011-01-01 -ed 2021-06-30
+pipenv run update_pricevolume.py -s 2011-01-01 -e 2021-06-30
+```
 
-or
-
+```
 pipenv run update_pricevolume.py -l
+```
+
+## Update Income Statements
+Required argument:
+
+| Switch | Description |
+| - | - |
+| -s, --start | Set up update start year and season. Format: "yyyy-s". |
+| -e,  --end | Set up update end year and season. Format: "yyyy-s". |
+| -l, --latest | Update database to latest date. |
+
+*Note: `[-s, -e]` or `[-l]` is required*
+
+Example:
+```
+pipenv run update_income_statements.py -s 2011-1 -e 2021-2
+```
+
+```
+pipenv run update_income_statements.py -l
 ```
