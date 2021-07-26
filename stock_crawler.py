@@ -48,6 +48,7 @@ class StockCrawler:
                     '91.0.4472.164 Safari/537.36'
                 }
             )
+
             stock_info_df = pd.read_csv(
                 StringIO(response.text), error_bad_lines=False)
             stock_dto = StockDTO(
@@ -76,6 +77,10 @@ class StockCrawler:
 
             return stock_dto
         except Exception as e:
+            if response.json()['error'] \
+                    and response.json()['error']['code'] == 'Unauthorized':
+                raise ValueError('Yahoo finance disconnected')
+
             print(f'Error: {e}')
             print(f'## Warning: Ticker {ticker} is failed!')
 
@@ -131,7 +136,7 @@ class StockCrawler:
         twse_target_url = \
             self.__YAHOO_FINANCE_API_URL + f'{ticker}.TW?' + query_str
         otc_target_url = \
-            self.__YAHOO_FINANCE_API_URL + '{ticker}.TWO?' + query_str
+            self.__YAHOO_FINANCE_API_URL + f'{ticker}.TWO?' + query_str
 
         return twse_target_url if is_twse else otc_target_url
 

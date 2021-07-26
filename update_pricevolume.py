@@ -85,11 +85,14 @@ for ticker in stock_crawler.stocks_list:
             else:
                 db_manage.insert_stock(dto)
 
-            time.sleep(8/1000)
+        except ValueError as v:
+            print(v)
+            time.sleep(120)
+            continue
         except Exception as e:
             print(f'Error: {e}')
             print(f'Ticker {ticker} wait for 5(s) and retry')
-            time.sleep(10)
+            time.sleep(5)
             continue
         else:
             break

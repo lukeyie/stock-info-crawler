@@ -100,8 +100,6 @@ db_manage = DBManage()
 
 is_collection = db_manage.get_collection(db_manage.collection_name)
 for ticker in stock_crawler.stocks_list:
-    if int(ticker) < 2464:
-        continue
     for attempt in range(0, 3):
         try:
             ticker_obj = is_collection.find_one({'ticker': ticker})
