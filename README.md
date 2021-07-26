@@ -24,6 +24,11 @@ Follow `dbCredential.config.example` and set up your Atlas Mongo DB information.
 
 Then rename `dbCredential.config.example` to `dbCredential.config`
 
+
+Follow `api.config.example` and set up your api information.
+
+Then rename `api.config.example` to `api.config`
+
 *Note: You may need to download `X509` licence for usage*
 
 ## Update Price and Volume
