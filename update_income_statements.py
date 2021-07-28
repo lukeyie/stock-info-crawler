@@ -1,5 +1,5 @@
 import argparse
-import datetime
+from datetime import datetime, date, timedelta
 import time
 
 from stock_crawler import StockCrawler
@@ -37,8 +37,9 @@ def get_start_end_season(ticker_obj, arg_options):
     start_season_str = arg_options.start_season
     end_season_str = arg_options.end_season
 
-    [start_year, start_season] = start_season_str.split('-')
-    [end_year, end_season] = end_season_str.split('-')
+    if start_season_str != None or end_season_str != None:
+        [start_year, start_season] = start_season_str.split('-')
+        [end_year, end_season] = end_season_str.split('-')
 
     if not ticker_obj or len(ticker_obj['income_statements']) <= 0:
         return[start_year, start_season, end_year, end_season]
@@ -58,12 +59,16 @@ def get_start_end_season(ticker_obj, arg_options):
     ]
 
     if arg_options.to_latest:
+        [latest_announcement_year, latest_announcement_season] = \
+            get_latest_income_statement_season(date.today()).split('-')
+        if db_last_year == int(latest_announcement_year) \
+                and db_last_season == int(latest_announcement_season):
+            return [None, None, None, None]
+
         print(f'The latest date in db is '
               f'year: {db_last_year}, season: {db_last_season}')
-        cur_datetime = datetime.date.today()
-        cur_year = cur_datetime.year
-        cur_season = get_season(cur_datetime.month)
-        return [db_last_year, db_last_season, cur_year, cur_season]
+        return [db_last_year, db_last_season,
+                latest_announcement_year, latest_announcement_season]
 
     encode_start_season = int(str(start_year) + str(start_season))
     encode_end_season = int(str(end_year) + str(end_season))
@@ -92,6 +97,23 @@ def get_season(month):
         return 3
     else:
         return 4
+
+
+def get_latest_income_statement_season(cur_date: date):
+    cur_year = cur_date.year
+    q1_date = date(year=cur_year, month=5, day=15)
+    q2_date = date(year=cur_year, month=8, day=14)
+    q3_date = date(year=cur_year, month=11, day=14)
+    q4_date = date(year=cur_year, month=3, day=31)
+
+    if cur_date > q4_date and cur_date <= q1_date:
+        return f"{cur_year - 1}-4"
+    elif cur_date > q1_date and cur_date <= q2_date:
+        return f"{cur_year}-1"
+    elif cur_date > q2_date and cur_date <= q3_date:
+        return f"{cur_year}-2"
+    elif cur_date > q3_date and cur_date <= (q4_date + timedelta(year=1)):
+        return f"{cur_year}-3"
 
 
 arg_options = arg_parse()

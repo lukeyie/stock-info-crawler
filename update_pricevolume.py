@@ -1,5 +1,5 @@
 import argparse
-import datetime
+from datetime import datetime, date, timedelta
 import time
 
 from stock_crawler import StockCrawler
@@ -34,6 +34,8 @@ def arg_parse():
 
 
 def get_start_end_date(ticker_obj, arg_options):
+    time_format = '%Y-%m-%d'
+
     start_date = arg_options.start_date
     end_date = arg_options.end_date
 
@@ -46,9 +48,20 @@ def get_start_end_date(ticker_obj, arg_options):
     db_last_date = ticker_date_info[len(ticker_date_info) - 1]['date']
 
     if arg_options.to_latest:
+        db_last_datetime = datetime.strptime(db_last_date, time_format)
+        today_date = str((datetime.today() - timedelta(hours=9)).date())
+        if db_last_date == today_date:
+            return [None, None]
+        # Friday (Skip Saturday and Sunday if last day is Friday)
+        if db_last_datetime.weekday() == 4:
+            db_last_plus_two_date = (
+                db_last_datetime + timedelta(days=2)).strftime(time_format)
+            if today_date > db_last_date \
+                    and today_date <= db_last_plus_two_date:
+                return [None, None]
+
         print(f'The latest date in db is {db_last_date}')
-        return [db_last_date,
-                str(datetime.date.today() + datetime.timedelta(1))]
+        return [db_last_date, today_date]
 
     if end_date > db_last_date:
         start_date = db_last_date \
@@ -84,6 +97,8 @@ for ticker in stock_crawler.stocks_list:
                 db_manage.update_pricevolume(dto)
             else:
                 db_manage.insert_stock(dto)
+
+            time.sleep(300/1000)
 
         except ValueError as v:
             print(v)
